@@ -2,7 +2,7 @@
 
 PATH_TO_LAMMPS='your/path/to/lammps' # Your full path to lammps here
 CORES_PER_JOB=1
-MAX_CONCURRENT_JOBS=35
+MAX_CONCURRENT_JOBS=40
 
 RHO_ARRAY=(0.85) # Same values from paper 
 T_ARRAY=(1)
@@ -31,7 +31,7 @@ for (( i=0; i<NUM_STATE_POINTS; i++ )); do
 
     for (( j=1; j<=NUM_JOBS; j++ )); do
         cd job_${j}
-	#mpirun --bind-to none --map-by slot -np 1 $PATH_TO_LAMMPS -in job_${j}.in &
+	mpirun --bind-to none --map-by slot -np 1 $PATH_TO_LAMMPS -in job_${j}.in &
         cd .. 
         # Monitor the number of running jobs
 	while (( $(jobs -r | wc -l) > 0 && $(jobs -r | wc -l) >= MAX_CONCURRENT_JOBS )); do
