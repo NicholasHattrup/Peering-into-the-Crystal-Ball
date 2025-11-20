@@ -90,7 +90,7 @@ def main():
 
     rdfs_all =  np.array(rdfs_all)
     # RDF figure 
-    fig, axs = plt.subplots(3, 3, figsize=(18, 6))
+    fig, axs = plt.subplots(NUM_ROWS, NUM_COLS, figsize=(18, 6))
 
 
     y_min_all = np.inf
@@ -128,8 +128,8 @@ def main():
             
     y_min = 0 
     y_max = np.ceil(y_max_all)
-    for i in range(3):
-        for j in range(3):
+    for i in range(NUM_ROWS):
+        for j in range(NUM_COLS):
             idx = 3*i+j
             axs[i, j].set_ylim(y_min, y_max)
             axs[i, j].text(1.5, y_max-1, r'$r_{\mathrm{peak}}=%.3f \, \sigma$' % sigma_peaks[idx], fontsize=16, ha='center', va='center', color='black')
@@ -140,15 +140,15 @@ def main():
 
     plt.clf()
 
-    fig, axs = plt.subplots(3, 3, figsize=(18, 6))
+    fig, axs = plt.subplots(NUM_ROWS, NUM_COLS, figsize=(18, 6))
 
 
     y_min_all = np.inf 
     y_max_all = -np.inf
 
 
-    for i in range(3):
-        for j in range(3):
+    for i in range(NUM_ROWS):
+        for j in range(NUM_COLS):
             idx = 3*i+j
             axs[i, j].plot(t[closest_points]*diffusions[idx],
                         msds_all[idx, closest_points],
@@ -185,8 +185,8 @@ def main():
             axs[i, j].axvspan(1e-5, t_B,color='mediumseagreen', alpha=0.12)
             axs[i, j].axvspan(t_L, x_max, color='mediumpurple', alpha=0.12)
 
-    for i in range(3):
-        for j in range(3):
+    for i in range(NUM_ROWS):
+        for j in range(NUM_COLS):
             axs[i, j].set_ylim(1e-5, y_max_all*2)
             axs[i, j].tick_params(axis='both', which='major', labelsize=14)
 
