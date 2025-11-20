@@ -1,12 +1,12 @@
 #!/bin/bash
 
-PATH_TO_LAMMPS='/Users/nickhattrup/mambaforge/envs/MD/bin/lmp_serial' # Your full path to lammps here
+PATH_TO_LAMMPS='your/path/to/lammps' # Your full path to lammps here
 CORES_PER_JOB=1
 MAX_CONCURRENT_JOBS=40
 
 RHO_ARRAY=(0.92 0.85 0.85 0.64 0.85 1 0.92 0.64 1) # Same values from paper 
 T_ARRAY=(1.15 1 0.85 1.25 2 2 0.75 3 3)
-NUM_JOBS=4
+NUM_JOBS=100
 
 
 NUM_STATE_POINTS=${#RHO_ARRAY[@]}
@@ -31,20 +31,19 @@ for (( i=0; i<NUM_STATE_POINTS; i++ )); do
 
     for (( j=1; j<=NUM_JOBS; j++ )); do
         cd job_${j}
-        mpirun -n $CORES_PER_JOB $PATH_TO_LAMMPS -in job_${j}.in & 
+	mpirun --bind-to none --map-by slot -np 1 $PATH_TO_LAMMPS -in job_${j}.in &
         cd .. 
         # Monitor the number of running jobs
-        while (( $(jobs -r | wc -l) >= MAX_CONCURRENT_JOBS )); do
-            sleep 15  # Wait briefly before checking again
-        done
-
+	while (( $(jobs -r | wc -l) > 0 && $(jobs -r | wc -l) >= MAX_CONCURRENT_JOBS )); do
+		sleep 15
+	done
     done 
     cd ..
 done
 
+wait
 
 RHO_LST=$(IFS=','; echo "${RHO_ARRAY[*]}")
 T_LST=$(IFS=','; echo "${T_ARRAY[*]}")
 
-
-python process_jobs.py "$RHO_CSV" "$T_CSV" "$NUM_JOBS"
+python process_jobs.py "$RHO_LST" "$T_LST" "$NUM_JOBS"

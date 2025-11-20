@@ -1,65 +1,13 @@
 import numpy as np
 import os, sys
 from scipy.stats import norm
+from scipy.interpolate import CubicSpline
 import scipy.sparse as sp
-from numba import jit
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 import scienceplots
 plt.style.use(['science', 'no-latex'])
 
-def load_dump(file_name, columns, ids=True):
-    with open(file_name, 'r') as f:
-        # Read the entire file into memory
-        lines = f.readlines()
-
-    num_atoms = None
-    header_size = 0
-
-    # Parse the header to find number of atoms and header size
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if 'ITEM: NUMBER OF ATOMS' in line:
-            num_atoms = int(lines[i + 1].strip())
-        elif 'ITEM: ATOMS' in line:
-            header_size = i + 1
-            break
-
-    if num_atoms is None:
-        raise ValueError("Number of atoms not found in the file header.")
-
-    # Calculate lines per configuration
-    lines_per_config = header_size + num_atoms
-
-    # Calculate the number of configurations
-    total_lines = len(lines)
-    num_configs = total_lines // lines_per_config
-
-    # Preallocate the array
-    data = np.zeros((num_configs, num_atoms, len(columns)))
-    start_idx = header_size
-    end_idx = start_idx + num_atoms
-
-    if ids:
-        num_features = len(columns) + 1
-    else:
-        num_features = len(columns)
-    
-
-    # Extract configurations
-    if ids: 
-        for config_index in range(num_configs):
-            config_data = np.fromstring("\n".join(lines[start_idx:end_idx]), sep=' ').reshape(-1, num_features)
-            data[config_index, config_data[:, 0].astype(int) - 1] = config_data[:, 1:]
-            start_idx += lines_per_config
-            end_idx += lines_per_config
-    else:
-        for config_index in range(num_configs):
-            config_data = np.fromstring("\n".join(lines[start_idx:end_idx]), sep=' ').reshape(-1, num_features)
-            data[config_index] = config_data
-            start_idx += lines_per_config
-            end_idx += lines_per_config
-    return data
 def parseRDF(file):
     with open(file) as f:
         f.readline()
@@ -88,6 +36,7 @@ def parseRDF(file):
 
 
 def main():
+    print('Processing jobs...')
     timestep = 0.002
     rho_vals = sys.argv[1].split(',')
     T_vals = sys.argv[2].split(',')
@@ -100,6 +49,7 @@ def main():
     diffusions = []
     msds_all = []
     rdfs_all = []
+    rdf_avg_all = []
 
     for directory in directories:
         msds = [] 
@@ -117,6 +67,9 @@ def main():
         diffusions.append(D)
         msds_all.append(msd_avg)
 
+
+    msds_all = np.array(msds_all)
+
     log_times = np.log(t)
     log_min = np.min(log_times[1:])
     log_max = np.max(log_times)
@@ -129,12 +82,13 @@ def main():
     for directory in directories:
         rdfs = []
         for i in range(1, num_jobs + 1):
-            _, dists, rdf = parseRDF(directory + '/rdf/rdf.dat')
+            _, dists, rdf = parseRDF(directory + f'/job_{i}/rdf_{i}.dat')
             rdfs.append(rdf)
-        rdf_avg = np.mean(rdfs, axis=0)
+        rdf_avg = np.mean(rdfs, axis=(0, 1))
         rdfs_all.append(rdfs)
-    
+        rdf_avg_all.append(rdf_avg)
 
+    rdfs_all =  np.array(rdfs_all)
     # RDF figure 
     fig, axs = plt.subplots(3, 3, figsize=(18, 6))
 
@@ -149,12 +103,14 @@ def main():
             for rdfs in rdfs_all[idx]:
                 for rdf in rdfs:
                     axs[i, j].plot(dists, rdf, color='gainsboro', alpha=0.05)
-            axs[i, j].plot(dists, rdf_avg[idx], color='cornflowerblue', alpha=1, linewidth=2.5, linestyle='-.')
-            peak = np.argmax(rdf_avg[idx])
-            sigma_peaks.append(dists[peak])
+            axs[i, j].plot(dists, rdf_avg_all[idx], color='cornflowerblue', alpha=1, linewidth=2.5, linestyle='-.')
+            cs = CubicSpline(dists, rdf_avg_all[idx], bc_type='natural')
+            dists_interp = np.linspace(dists[0], dists[-1], int(len(dists)*200))
+            rdf_interp = cs(dists_interp)
+            peak = np.argmax(rdf_interp)
+            sigma_peaks.append(dists_interp[peak])
             # Draw vertical line at peak
-            axs[i, j].axvline(x=dists[peak], color='black', linestyle=':', alpha=0.75, linewidth=1.5)
-            axs[i, j].text(1.5, 4, r'$r_{\mathrm{peak}}=%.3f \, \sigma$' % dists[peak], fontsize=16, ha='center', va='center', color='black')
+            axs[i, j].axvline(x=dists_interp[peak], color='black', linestyle=':', alpha=0.75, linewidth=1.5)
 
 
             y_min, y_max = axs[i, j].get_ylim()
@@ -167,18 +123,26 @@ def main():
             axs[i, j].set_xticklabels([0, 0.5, 1, 1.5, 2], fontsize=16)
             axs[-1, j].set_xlabel(r'$r/\sigma$', fontsize=24)
             axs[i, 0].set_ylabel(r'$g(r)$', fontsize=24)
-            temp, rho = rho_vals[idx], T_vals[idx]
+            rho, temp = float(rho_vals[idx]), float(T_vals[idx])
             axs[i, j].set_title(r'$T^{*} = %.2f,  \,  \rho^{*} = %.2f$' % (temp, rho), fontsize=18, pad=10)
             
-
+    y_min = 0 
+    y_max = np.ceil(y_max_all)
     for i in range(3):
         for j in range(3):
-            axs[i, j].set_ylim(y_min_all, y_max_all)
+            idx = 3*i+j
+            axs[i, j].set_ylim(y_min, y_max)
+            axs[i, j].text(1.5, y_max-1, r'$r_{\mathrm{peak}}=%.3f \, \sigma$' % sigma_peaks[idx], fontsize=16, ha='center', va='center', color='black')
+
 
     plt.tight_layout()
     plt.savefig('rdfs.png', dpi=300, bbox_inches='tight')
 
     plt.clf()
+
+    fig, axs = plt.subplots(3, 3, figsize=(18, 6))
+
+
     y_min_all = np.inf 
     y_max_all = -np.inf
 
@@ -186,7 +150,7 @@ def main():
     for i in range(3):
         for j in range(3):
             idx = 3*i+j
-            axs[i, j].plot(t[closest_points]/diffusions[idx],
+            axs[i, j].plot(t[closest_points]*diffusions[idx],
                         msds_all[idx, closest_points],
                         marker='o',
                         markersize=8,
@@ -209,14 +173,15 @@ def main():
 
             x_min, x_max = axs[i, j].get_xlim()
             axs[i, j].set_xlim(1e-5, x_max)
-            temp, rho = rho_vals[idx], T_vals[idx]
+            rho, temp = float(rho_vals[idx]), float(T_vals[idx])
             axs[i, j].set_title(r'$T^{*} = %.2f,  \,  \rho^{*} = %.2f$' % (temp, rho), fontsize=18, pad=10)
 
             t_B = (2**(1/6)-sigma_peaks[idx])/np.sqrt(3*temp)
-            t_B *= diffusions[idx]
-
             t_L = (1/(np.pi * sigma_peaks[idx]**2 * rho))/np.sqrt(3*temp)
+
+            t_B *= diffusions[idx]
             t_L *= diffusions[idx]
+
             axs[i, j].axvspan(1e-5, t_B,color='mediumseagreen', alpha=0.12)
             axs[i, j].axvspan(t_L, x_max, color='mediumpurple', alpha=0.12)
 
@@ -231,6 +196,6 @@ def main():
     plt.savefig('msd_regions.png', dpi=300, bbox_inches='tight')
 
 
+if __name__ == "__main__":
+    main()
 
-
-    
