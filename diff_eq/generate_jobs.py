@@ -40,8 +40,8 @@ thermo 1000
 
 fix mynvt all nvt temp {T} {T} $(100.0*dt)
 
-velocity all create {T} {random_seed}
-displace_atoms all random 0.1 0.1 0.1 {random_seed} # And positions
+velocity all create {T} {random_seed} # randomize velocities
+displace_atoms all random 0.2 0.2 0.2 {random_seed} # And positions from lattice for faster scattering
 
 run 100000
 unfix mynvt
